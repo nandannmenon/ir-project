@@ -1,4 +1,4 @@
-# T3 News Recommender — CSD358 IR hackathon, track T3
+# T3 News Recommender 
 
 An inspectable content-based news recommender built on Microsoft's MIND dataset. Articles are documents, a reader's history is the query, and sparse TF-IDF cosine similarity is the main relevance signal. Around it sit champion lists and cluster pruning for candidate generation, Jaccard, popularity and recency as secondary signals in a net score, heap-based top-K selection, diversity reranking (MMR), a "content seen?" filter for re-published copies of articles already read, and explanations built from the terms that contribute most to each cosine.
 
