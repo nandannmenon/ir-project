@@ -1,0 +1,176 @@
+{
+  "evaluation_protocol": {
+    "ablation_models": {
+      "A. Popularity baseline": {
+        "description": "Rank displayed eligible articles by training-period click count.",
+        "diversity": false,
+        "weights": null
+      },
+      "B. TF-IDF cosine": {
+        "description": "User-profile/article cosine only.",
+        "diversity": false,
+        "weights": {
+          "jaccard": 0.0,
+          "popularity": 0.0,
+          "recency": 0.0,
+          "relevance": 1.0
+        }
+      },
+      "C. TF-IDF + Jaccard": {
+        "description": "Cosine-primary lexical and set similarity ablation.",
+        "diversity": false,
+        "weights": {
+          "jaccard": 0.1,
+          "popularity": 0.0,
+          "recency": 0.0,
+          "relevance": 0.9
+        }
+      },
+      "D. TF-IDF + Jaccard + recency/popularity": {
+        "description": "Full weighted net score before diversity reranking.",
+        "diversity": false,
+        "weights": {
+          "jaccard": 0.1,
+          "popularity": 0.1,
+          "recency": 0.05,
+          "relevance": 0.75
+        }
+      },
+      "E. Full model + diversity reranking": {
+        "description": "Model D followed by greedy cosine redundancy reranking.",
+        "diversity": true,
+        "diversity_lambda": 0.75,
+        "weights": {
+          "jaccard": 0.1,
+          "popularity": 0.1,
+          "recency": 0.05,
+          "relevance": 0.75
+        }
+      },
+      "F. Multi-interest profiles": {
+        "description": "Model D weights, but the history is split into leader-clustered interests: cosine against the best-matching interest and top-K slots shared in proportion to interest size.",
+        "diversity": false,
+        "multi_interest": true,
+        "weights": {
+          "jaccard": 0.1,
+          "popularity": 0.1,
+          "recency": 0.05,
+          "relevance": 0.75
+        }
+      }
+    },
+    "aggregation": "Macro-average query metrics within each user, then macro-average users.",
+    "candidate_policy": "Only valid articles shown in each held-out impression; consumed history excluded.",
+    "catalog_size": 51278,
+    "cutoff": "2019-11-13T20:36:19",
+    "diversity_lambda": 0.75,
+    "evaluated_impressions": 31290,
+    "evaluated_users": 20654,
+    "evaluation_set_sha256": "c718dc653add3995188b0374316ede38883cb0be46a7b533c66f4f3394452fac",
+    "heldout_impressions_skipped_no_known_candidates": 0,
+    "heldout_impressions_skipped_no_known_unconsumed_positive": 103,
+    "history_copies_removed": 411,
+    "history_copy_policy": "Shown articles with the same normalized title as, or cosine >= 0.9 to, an already-read article are removed for every model, including the baseline.",
+    "history_policy": "Each held-out impression's recorded pre-impression history only.",
+    "ks": [
+      5,
+      10
+    ],
+    "missing_timestamp_impressions_omitted": 0,
+    "normalization": "Cosine and Jaccard are divided by their maximum over each impression's candidates; then weighted mean: sum(weight_i * component_i) / sum(weight_i).",
+    "popularity_policy": "Click counts from training impressions only.",
+    "recency_policy": "MIND has no publication time. Proxy timestamp: first training impression that showed the article; training-log start for articles only seen in training histories; the cutoff for articles never seen before it (new).",
+    "relevant_history_copies_removed": 74,
+    "split_method": "global chronological cutoff; train timestamp <= cutoff; test timestamp > cutoff",
+    "test_impressions": 31393,
+    "train_impressions": 125572,
+    "tuning_policy": "Fixed component weights specified before evaluation; no evaluation-set tuning."
+  },
+  "experiment": "Chronological T3 recommender component ablation",
+  "models": [
+    {
+      "AvgPairwiseSimilarity@10": 0.007312432600828829,
+      "AvgPairwiseSimilarity@5": 0.007753980972493511,
+      "CategoryDiversity@10": 0.6629362081468312,
+      "CategoryDiversity@5": 0.7959469574302053,
+      "Coverage": 0.040153672140099066,
+      "Model": "A. Popularity baseline",
+      "NDCG@10": 0.28564083314446903,
+      "NDCG@5": 0.2264314500422796,
+      "P@10": 0.06286285105424255,
+      "P@5": 0.07926341182998489,
+      "R@10": 0.5063987224883341,
+      "R@5": 0.33437366052391937
+    },
+    {
+      "AvgPairwiseSimilarity@10": 0.01322215976827677,
+      "AvgPairwiseSimilarity@5": 0.019910994361057793,
+      "CategoryDiversity@10": 0.6291505316663982,
+      "CategoryDiversity@5": 0.7263777812194584,
+      "Coverage": 0.07219470338156714,
+      "Model": "B. TF-IDF cosine",
+      "NDCG@10": 0.343080744324875,
+      "NDCG@5": 0.28623458976989824,
+      "P@10": 0.07262159061471543,
+      "P@5": 0.09888183527091245,
+      "R@10": 0.5601273967250212,
+      "R@5": 0.3954359136110197
+    },
+    {
+      "AvgPairwiseSimilarity@10": 0.013227440930626775,
+      "AvgPairwiseSimilarity@5": 0.02002142673578787,
+      "CategoryDiversity@10": 0.6151553660426134,
+      "CategoryDiversity@5": 0.7124789325508315,
+      "Coverage": 0.07260423573462303,
+      "Model": "C. TF-IDF + Jaccard",
+      "NDCG@10": 0.3466925919968748,
+      "NDCG@5": 0.2905630895640457,
+      "P@10": 0.0733330339060464,
+      "P@5": 0.10062546686929373,
+      "R@10": 0.5650478982765023,
+      "R@5": 0.40257788861672306
+    },
+    {
+      "AvgPairwiseSimilarity@10": 0.013296458084184398,
+      "AvgPairwiseSimilarity@5": 0.020081377842057577,
+      "CategoryDiversity@10": 0.6147297183980251,
+      "CategoryDiversity@5": 0.7122101236185675,
+      "Coverage": 0.07063458013183041,
+      "Model": "D. TF-IDF + Jaccard + recency/popularity",
+      "NDCG@10": 0.3480454715114394,
+      "NDCG@5": 0.29173235143988585,
+      "P@10": 0.07350999161689585,
+      "P@5": 0.10106840347713787,
+      "R@10": 0.5672945197739953,
+      "R@5": 0.4039441013860539
+    },
+    {
+      "AvgPairwiseSimilarity@10": 0.011857990294134119,
+      "AvgPairwiseSimilarity@5": 0.0172574086850507,
+      "CategoryDiversity@10": 0.6198371351627481,
+      "CategoryDiversity@5": 0.718279884850525,
+      "Coverage": 0.07057607550996528,
+      "Model": "E. Full model + diversity reranking",
+      "NDCG@10": 0.34833150428424253,
+      "NDCG@5": 0.29174192456763803,
+      "P@10": 0.07359191045389846,
+      "P@5": 0.10103378991923584,
+      "R@10": 0.567940337380208,
+      "R@5": 0.40370095716740856
+    },
+    {
+      "AvgPairwiseSimilarity@10": 0.010952432458777693,
+      "AvgPairwiseSimilarity@5": 0.01766258376548482,
+      "CategoryDiversity@10": 0.6231669228637229,
+      "CategoryDiversity@5": 0.7167978404324875,
+      "Coverage": 0.07141464175669877,
+      "Model": "F. Multi-interest profiles",
+      "NDCG@10": 0.34744976026595115,
+      "NDCG@5": 0.2926094157359549,
+      "P@10": 0.07305882864539784,
+      "P@5": 0.10156589246910736,
+      "R@10": 0.5647328502573343,
+      "R@5": 0.4058957854165146
+    }
+  ]
+}

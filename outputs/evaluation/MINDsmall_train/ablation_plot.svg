@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="520" viewBox="0 0 1000 520">
+<rect width="100%" height="100%" fill="white"/>
+<text x="500.0" y="36" text-anchor="middle" font-family="Arial" font-size="22" font-weight="bold">Fixed-weight model ablation</text>
+<line x1="80" y1="410.0" x2="970" y2="410.0" stroke="#dddddd"/>
+<text x="68" y="415.0" text-anchor="end" font-family="Arial" font-size="12">0.0</text>
+<line x1="80" y1="343.0" x2="970" y2="343.0" stroke="#dddddd"/>
+<text x="68" y="348.0" text-anchor="end" font-family="Arial" font-size="12">0.2</text>
+<line x1="80" y1="276.0" x2="970" y2="276.0" stroke="#dddddd"/>
+<text x="68" y="281.0" text-anchor="end" font-family="Arial" font-size="12">0.4</text>
+<line x1="80" y1="209.0" x2="970" y2="209.0" stroke="#dddddd"/>
+<text x="68" y="214.0" text-anchor="end" font-family="Arial" font-size="12">0.6</text>
+<line x1="80" y1="142.0" x2="970" y2="142.0" stroke="#dddddd"/>
+<text x="68" y="147.0" text-anchor="end" font-family="Arial" font-size="12">0.8</text>
+<line x1="80" y1="75.0" x2="970" y2="75.0" stroke="#dddddd"/>
+<text x="68" y="80.0" text-anchor="end" font-family="Arial" font-size="12">1.0</text>
+<rect x="100.8" y="383.4" width="24.7" height="26.6" fill="#276FBF"/>
+<text x="114.1" y="378.4" text-anchor="middle" font-family="Arial" font-size="10">0.08</text>
+<rect x="127.5" y="298.0" width="24.7" height="112.0" fill="#F28E2B"/>
+<text x="140.8" y="293.0" text-anchor="middle" font-family="Arial" font-size="10">0.33</text>
+<rect x="154.2" y="388.9" width="24.7" height="21.1" fill="#59A14F"/>
+<text x="167.5" y="383.9" text-anchor="middle" font-family="Arial" font-size="10">0.06</text>
+<rect x="180.9" y="240.4" width="24.7" height="169.6" fill="#B07AA1"/>
+<text x="194.2" y="235.4" text-anchor="middle" font-family="Arial" font-size="10">0.51</text>
+<text x="154.2" y="435" text-anchor="middle" font-family="Arial" font-size="12">A Popularity</text>
+<rect x="249.1" y="376.9" width="24.7" height="33.1" fill="#276FBF"/>
+<text x="262.4" y="371.9" text-anchor="middle" font-family="Arial" font-size="10">0.10</text>
+<rect x="275.8" y="277.5" width="24.7" height="132.5" fill="#F28E2B"/>
+<text x="289.2" y="272.5" text-anchor="middle" font-family="Arial" font-size="10">0.40</text>
+<rect x="302.5" y="385.7" width="24.7" height="24.3" fill="#59A14F"/>
+<text x="315.9" y="380.7" text-anchor="middle" font-family="Arial" font-size="10">0.07</text>
+<rect x="329.2" y="222.4" width="24.7" height="187.6" fill="#B07AA1"/>
+<text x="342.6" y="217.4" text-anchor="middle" font-family="Arial" font-size="10">0.56</text>
+<text x="302.5" y="435" text-anchor="middle" font-family="Arial" font-size="12">B Cosine</text>
+<rect x="397.4" y="376.3" width="24.7" height="33.7" fill="#276FBF"/>
+<text x="410.8" y="371.3" text-anchor="middle" font-family="Arial" font-size="10">0.10</text>
+<rect x="424.1" y="275.1" width="24.7" height="134.9" fill="#F28E2B"/>
+<text x="437.5" y="270.1" text-anchor="middle" font-family="Arial" font-size="10">0.40</text>
+<rect x="450.8" y="385.4" width="24.7" height="24.6" fill="#59A14F"/>
+<text x="464.2" y="380.4" text-anchor="middle" font-family="Arial" font-size="10">0.07</text>
+<rect x="477.5" y="220.7" width="24.7" height="189.3" fill="#B07AA1"/>
+<text x="490.9" y="215.7" text-anchor="middle" font-family="Arial" font-size="10">0.57</text>
+<text x="450.8" y="435" text-anchor="middle" font-family="Arial" font-size="12">C + Jaccard</text>
+<rect x="545.8" y="376.1" width="24.7" height="33.9" fill="#276FBF"/>
+<text x="559.1" y="371.1" text-anchor="middle" font-family="Arial" font-size="10">0.10</text>
+<rect x="572.5" y="274.7" width="24.7" height="135.3" fill="#F28E2B"/>
+<text x="585.8" y="269.7" text-anchor="middle" font-family="Arial" font-size="10">0.40</text>
+<rect x="599.2" y="385.4" width="24.7" height="24.6" fill="#59A14F"/>
+<text x="612.5" y="380.4" text-anchor="middle" font-family="Arial" font-size="10">0.07</text>
+<rect x="625.9" y="220.0" width="24.7" height="190.0" fill="#B07AA1"/>
+<text x="639.2" y="215.0" text-anchor="middle" font-family="Arial" font-size="10">0.57</text>
+<text x="599.2" y="435" text-anchor="middle" font-family="Arial" font-size="12">D + quality</text>
+<rect x="694.1" y="376.2" width="24.7" height="33.8" fill="#276FBF"/>
+<text x="707.5" y="371.2" text-anchor="middle" font-family="Arial" font-size="10">0.10</text>
+<rect x="720.8" y="274.8" width="24.7" height="135.2" fill="#F28E2B"/>
+<text x="734.2" y="269.8" text-anchor="middle" font-family="Arial" font-size="10">0.40</text>
+<rect x="747.5" y="385.3" width="24.7" height="24.7" fill="#59A14F"/>
+<text x="760.9" y="380.3" text-anchor="middle" font-family="Arial" font-size="10">0.07</text>
+<rect x="774.2" y="219.7" width="24.7" height="190.3" fill="#B07AA1"/>
+<text x="787.6" y="214.7" text-anchor="middle" font-family="Arial" font-size="10">0.57</text>
+<text x="747.5" y="435" text-anchor="middle" font-family="Arial" font-size="12">E + diversity</text>
+<rect x="842.4" y="376.0" width="24.7" height="34.0" fill="#276FBF"/>
+<text x="855.8" y="371.0" text-anchor="middle" font-family="Arial" font-size="10">0.10</text>
+<rect x="869.1" y="274.0" width="24.7" height="136.0" fill="#F28E2B"/>
+<text x="882.5" y="269.0" text-anchor="middle" font-family="Arial" font-size="10">0.41</text>
+<rect x="895.8" y="385.5" width="24.7" height="24.5" fill="#59A14F"/>
+<text x="909.2" y="380.5" text-anchor="middle" font-family="Arial" font-size="10">0.07</text>
+<rect x="922.5" y="220.8" width="24.7" height="189.2" fill="#B07AA1"/>
+<text x="935.9" y="215.8" text-anchor="middle" font-family="Arial" font-size="10">0.56</text>
+<text x="895.8" y="435" text-anchor="middle" font-family="Arial" font-size="12">F Multi-interest</text>
+<rect x="80.0" y="472" width="14" height="14" fill="#276FBF"/>
+<text x="100.0" y="484" font-family="Arial" font-size="12">P@5</text>
+<rect x="295.0" y="472" width="14" height="14" fill="#F28E2B"/>
+<text x="315.0" y="484" font-family="Arial" font-size="12">R@5</text>
+<rect x="510.0" y="472" width="14" height="14" fill="#59A14F"/>
+<text x="530.0" y="484" font-family="Arial" font-size="12">P@10</text>
+<rect x="725.0" y="472" width="14" height="14" fill="#B07AA1"/>
+<text x="745.0" y="484" font-family="Arial" font-size="12">R@10</text>
+</svg>

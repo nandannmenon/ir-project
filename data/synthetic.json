@@ -1,0 +1,20 @@
+{
+  "description": "Hand-written toy catalog for smoke tests and the CLI/web demo. Not real news; no personal data.",
+  "articles": [
+    {"article_id": "A1", "title": "Rocket launches weather satellite into orbit", "abstract": "The launch puts a new satellite in orbit to track storms and climate.", "category": "science", "subcategory": "space", "timestamp": "2023-12-20"},
+    {"article_id": "A2", "title": "Telescope finds water vapour on distant planet", "abstract": "Astronomers used the space telescope to study the planet's atmosphere.", "category": "science", "subcategory": "space", "timestamp": "2023-12-22"},
+    {"article_id": "A3", "title": "Astronauts prepare for long mission to the moon", "abstract": "The crew will test a new rocket and spend weeks in lunar orbit.", "category": "science", "subcategory": "space", "timestamp": "2023-12-28"},
+    {"article_id": "A4", "title": "Local club wins football championship final", "abstract": "A late goal decided the championship match in front of a home crowd.", "category": "sports", "subcategory": "football", "timestamp": "2023-12-18"},
+    {"article_id": "A5", "title": "Football coach explains new training plan", "abstract": "The coach wants the team fitter before the next championship season.", "category": "sports", "subcategory": "football", "timestamp": "2023-12-26"},
+    {"article_id": "A6", "title": "Easy pasta recipe with garlic and tomato sauce", "abstract": "A quick dinner recipe that needs only pasta, garlic, tomatoes and basil.", "category": "food", "subcategory": "recipes", "timestamp": "2023-12-15"},
+    {"article_id": "A7", "title": "Five winter soup recipes for cold evenings", "abstract": "Warm soup recipes with vegetables, beans and fresh herbs.", "category": "food", "subcategory": "recipes", "timestamp": "2023-12-27"},
+    {"article_id": "A8", "title": "New phone battery lasts two days on one charge", "abstract": "Engineers improved battery chemistry to extend phone battery life.", "category": "technology", "subcategory": "gadgets", "timestamp": "2023-12-29"},
+    {"article_id": "A9", "title": "Satellite images show melting glaciers", "abstract": "Orbit data from the climate satellite reveals faster glacier loss.", "category": "science", "subcategory": "climate", "timestamp": "2023-12-30"},
+    {"article_id": "A10", "title": "Championship rivals meet again in cup match", "abstract": "Last season's football finalists face each other in the cup.", "category": "sports", "subcategory": "football", "timestamp": "2023-12-31"}
+  ],
+  "users": [
+    {"user_id": "U1", "history": ["A1", "A2", "A6"], "timestamps": ["2023-12-21", "2023-12-23", "2023-12-24"]},
+    {"user_id": "U2", "history": ["A4"], "timestamps": ["2023-12-19"]},
+    {"user_id": "U3", "history": ["A7", "A8", "A5"], "timestamps": ["2023-12-28", "2023-12-29", "2023-12-30"]}
+  ]
+}

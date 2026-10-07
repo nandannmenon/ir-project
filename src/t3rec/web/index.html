@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f3f3ed">
+  <title>T3 / Recommender workbench</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="wordmark" href="/" aria-label="T3 recommender workbench">
+      <span class="brand-mark">T3</span>
+      <span class="brand-slash">/</span>
+      <span class="brand-label">REC</span>
+    </a>
+    <div class="top-meta">
+      <span class="live-dot"></span>
+      <span>LOCAL MODEL</span>
+      <span id="catalog-count" class="catalog-pill">Loading catalog</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="page-heading">
+      <div>
+        <p class="eyebrow">RECOMMENDATION SYSTEMS / PERSONALIZATION</p>
+        <h1>News recommendation workbench</h1>
+      </div>
+      <span class="dataset-tag">LOCAL CORPUS</span>
+    </section>
+
+    <div class="workspace">
+      <aside class="controls-panel" aria-label="Recommendation controls">
+        <div class="panel-heading"><span>Reader profile</span></div>
+        <label class="field-label" for="user-select">Start from a profile</label>
+        <select id="user-select"><option value="">Cold-start reader · no history</option></select>
+        <label class="field-label" for="user-id">Reader ID</label>
+        <input id="user-id" type="text" value="visitor" maxlength="80">
+
+        <div class="panel-heading section-divider"><span>Ranking</span></div>
+        <div class="field-row">
+          <label class="field-label" for="candidate-mode">Candidate generation</label>
+          <select id="candidate-mode">
+            <option value="champions">Interest champions</option>
+            <option value="clusters">Cluster pruning</option>
+            <option value="all">Exact full catalog</option>
+          </select>
+        </div>
+        <div class="field-row split-row">
+          <label class="field-label" for="top-k">Results</label>
+          <input id="top-k" type="number" min="1" max="20" value="5">
+        </div>
+        <div class="field-row split-row">
+          <label class="field-label" for="candidate-pool">Candidate pool</label>
+          <input id="candidate-pool" type="number" min="5" max="5000" value="100">
+        </div>
+
+        <div class="panel-heading section-divider"><span>Score weights</span></div>
+        <div class="weight-list">
+          <label class="weight-row"><span><i class="weight-dot relevance"></i>Cosine relevance</span><input data-weight="relevance" type="number" min="0" max="100" step="5" value="75"><b>%</b></label>
+          <label class="weight-row"><span><i class="weight-dot jaccard"></i>Set similarity</span><input data-weight="jaccard" type="number" min="0" max="100" step="5" value="10"><b>%</b></label>
+          <label class="weight-row"><span><i class="weight-dot recency"></i>Recency</span><input data-weight="recency" type="number" min="0" max="100" step="5" value="5"><b>%</b></label>
+          <label class="weight-row"><span><i class="weight-dot popularity"></i>Popularity</span><input data-weight="popularity" type="number" min="0" max="100" step="5" value="10"><b>%</b></label>
+        </div>
+
+        <div class="diversity-control">
+          <label class="toggle-label"><input id="multi-interest" type="checkbox"><span class="toggle-track"></span><span>Multi-interest profile</span></label>
+          <label class="toggle-label"><input id="diversify" type="checkbox" checked><span class="toggle-track"></span><span>Diversity reranking</span></label>
+          <label class="lambda-row" for="lambda"><span>Relevance ↔ variety</span><output id="lambda-value">75%</output></label>
+          <input id="lambda" type="range" min="0" max="100" value="75">
+        </div>
+        <button id="run-button" class="run-button" type="button"><span>Run recommendations</span><span aria-hidden="true">↗</span></button>
+        <p id="error-message" class="error-message" role="alert"></p>
+      </aside>
+
+      <section class="results-panel" aria-label="Recommendation results">
+        <div class="results-toolbar">
+          <div><p class="eyebrow">RANKED FOR THIS READER</p><h2 id="results-title">Waiting for a profile</h2></div>
+          <div class="run-stats"><span id="mode-badge" class="mode-badge">READY</span><span id="candidate-stat">— candidates</span></div>
+        </div>
+        <div id="profile-strip" class="profile-strip"><span class="strip-label">PROFILE VECTOR</span><span class="muted">Choose a reader profile, then run.</span></div>
+        <div id="recommendation-list" class="recommendation-list">
+          <div class="welcome-state"><p>Recommendations will appear here.</p><span>Choose a reader profile, or run a cold-start recommendation.</span></div>
+        </div>
+        <footer class="results-footer"><span>TF–IDF · COSINE · JACCARD · MMR</span><span>EXPLANATIONS FROM OBSERVED SIGNALS</span></footer>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

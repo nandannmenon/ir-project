@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+data/raw/
+data/processed/
+work/
+# Processed MIND copies written by eval_cli; the MIND license does not allow redistribution.
+outputs/**/cache/
+# Local environments and OS metadata.
+.venv/
+venv/
+.DS_Store
+__MACOSX/

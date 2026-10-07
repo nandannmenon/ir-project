@@ -1,0 +1,4 @@
+'''PYTHONPATH=src python3 -m t3rec.web \
+  --raw-dir data/raw/MINDsmall_train \
+  --cache-dir data/processed/MINDsmall_train \
+  --port 8765'''

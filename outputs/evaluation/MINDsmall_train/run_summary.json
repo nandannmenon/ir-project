@@ -1,0 +1,87 @@
+{
+  "ablation_models": {
+    "A. Popularity baseline": {
+      "description": "Rank displayed eligible articles by training-period click count.",
+      "diversity": false,
+      "weights": null
+    },
+    "B. TF-IDF cosine": {
+      "description": "User-profile/article cosine only.",
+      "diversity": false,
+      "weights": {
+        "jaccard": 0.0,
+        "popularity": 0.0,
+        "recency": 0.0,
+        "relevance": 1.0
+      }
+    },
+    "C. TF-IDF + Jaccard": {
+      "description": "Cosine-primary lexical and set similarity ablation.",
+      "diversity": false,
+      "weights": {
+        "jaccard": 0.1,
+        "popularity": 0.0,
+        "recency": 0.0,
+        "relevance": 0.9
+      }
+    },
+    "D. TF-IDF + Jaccard + recency/popularity": {
+      "description": "Full weighted net score before diversity reranking.",
+      "diversity": false,
+      "weights": {
+        "jaccard": 0.1,
+        "popularity": 0.1,
+        "recency": 0.05,
+        "relevance": 0.75
+      }
+    },
+    "E. Full model + diversity reranking": {
+      "description": "Model D followed by greedy cosine redundancy reranking.",
+      "diversity": true,
+      "diversity_lambda": 0.75,
+      "weights": {
+        "jaccard": 0.1,
+        "popularity": 0.1,
+        "recency": 0.05,
+        "relevance": 0.75
+      }
+    },
+    "F. Multi-interest profiles": {
+      "description": "Model D weights, but the history is split into leader-clustered interests: cosine against the best-matching interest and top-K slots shared in proportion to interest size.",
+      "diversity": false,
+      "multi_interest": true,
+      "weights": {
+        "jaccard": 0.1,
+        "popularity": 0.1,
+        "recency": 0.05,
+        "relevance": 0.75
+      }
+    }
+  },
+  "aggregation": "Macro-average query metrics within each user, then macro-average users.",
+  "candidate_policy": "Only valid articles shown in each held-out impression; consumed history excluded.",
+  "catalog_size": 51278,
+  "cutoff": "2019-11-13T20:36:19",
+  "diversity_lambda": 0.75,
+  "evaluated_impressions": 31290,
+  "evaluated_users": 20654,
+  "evaluation_set_sha256": "c718dc653add3995188b0374316ede38883cb0be46a7b533c66f4f3394452fac",
+  "heldout_impressions_skipped_no_known_candidates": 0,
+  "heldout_impressions_skipped_no_known_unconsumed_positive": 103,
+  "history_copies_removed": 411,
+  "history_copy_policy": "Shown articles with the same normalized title as, or cosine >= 0.9 to, an already-read article are removed for every model, including the baseline.",
+  "history_policy": "Each held-out impression's recorded pre-impression history only.",
+  "ks": [
+    5,
+    10
+  ],
+  "missing_timestamp_impressions_omitted": 0,
+  "normalization": "Cosine and Jaccard are divided by their maximum over each impression's candidates; then weighted mean: sum(weight_i * component_i) / sum(weight_i).",
+  "popularity_policy": "Click counts from training impressions only.",
+  "recency_policy": "MIND has no publication time. Proxy timestamp: first training impression that showed the article; training-log start for articles only seen in training histories; the cutoff for articles never seen before it (new).",
+  "relevant_history_copies_removed": 74,
+  "split_method": "global chronological cutoff; train timestamp <= cutoff; test timestamp > cutoff",
+  "test_impressions": 31393,
+  "train_impressions": 125572,
+  "tuning_policy": "Fixed component weights specified before evaluation; no evaluation-set tuning."
+}
