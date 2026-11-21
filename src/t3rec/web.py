@@ -11,6 +11,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 from .data import load_json_fixture
+from .entities import EntityIndex
 from .ingest import ingest_mind
 from .models import User
 from .pipeline import Recommender
@@ -185,7 +186,8 @@ def main() -> None:
 
     if args.raw_dir:
         dataset = ingest_mind(args.raw_dir, args.cache_dir)
-        recommender = Recommender.from_processed(dataset)
+        recommender = Recommender.from_processed(
+            dataset, entity_index=EntityIndex.from_mind(args.raw_dir, dataset.articles))
         users = list(dataset.users.values())
     else:
         articles, users = load_json_fixture(args.fixture)

@@ -15,6 +15,7 @@ from .diversity import (DiversityComparison, compare_diversity as build_diversit
                        diversity_rerank)
 from .explain import explain_recommendation
 from .models import Article, Recommendation, User
+from .entities import EntityIndex
 from .profiles import (UserProfile, build_interest_profiles, build_user_profile,
                        proportional_quotas)
 from .scoring import (ScoreWeights, article_feature_set, calculate_net_score,
@@ -65,6 +66,8 @@ class Recommender:
                  normalize_query_components: bool = True,
                  interest_threshold: float = 0.1,
                  max_interests: int = 3,
+                 entity_index: EntityIndex | None = None,
+                 interest_entity_weight: float = 0.0,
                  item_vectors: ItemVectors | None = None,
                  cold_start_config: ColdStartConfig | None = None):
         if history_duplicate_threshold is not None and not 0.0 < history_duplicate_threshold <= 1.0:
@@ -112,6 +115,15 @@ class Recommender:
         self.normalize_query_components = normalize_query_components
         self.interest_threshold = interest_threshold
         self.max_interests = max_interests
+        # Centred Wikidata entity vectors (MIND entity_embedding.vec): they
+        # label interests by entity names and, with a positive weight, join
+        # word similarity when the history is grouped into interests. The
+        # default weight is 0: on the validation slice entity grouping did not
+        # change NDCG@10 (0.3750 vs 0.3749 at weight 0.3) and on inspection it
+        # could merge unrelated stories, so entities label interests and feed
+        # the learning-to-rank model instead.
+        self.entity_index = entity_index
+        self.interest_entity_weight = interest_entity_weight if entity_index is not None else 0.0
         self.candidate_interest_limit = candidate_interest_limit
         self.champion_per_interest_limit = champion_per_interest_limit
         self.cold_start_config = cold_start_config or ColdStartConfig()
@@ -143,7 +155,8 @@ class Recommender:
                   recency_half_life_days: float = 14.0,
                   interaction_weights: Sequence[float] | None = None,
                   candidate_ids: set[str] | None = None,
-                  multi_interest: bool = False) -> list[Recommendation]:
+                  multi_interest: bool = False,
+                  interest_entity_weight: float | None = None) -> list[Recommendation]:
         """Return top-K results with every normalized score component exposed.
 
         ``candidate_mode='champions'`` is the efficient default. ``'all'`` is
@@ -155,7 +168,9 @@ class Recommender:
         (``build_interest_profiles``). Each interest retrieves its own
         candidates, an article's cosine is taken against its best-matching
         interest, and result slots are shared across interests in proportion
-        to how many read articles each holds.
+        to how many read articles each holds. ``interest_entity_weight``
+        overrides the recommender's entity weight used when grouping the
+        history into interests (0 = words only).
         """
         if limit < 1:
             raise ValueError("limit must be at least 1")
@@ -184,9 +199,13 @@ class Recommender:
         profile = self.profile(user, as_of=reference_time,
                                half_life_days=half_life_days,
                                interaction_weights=interaction_weights)
+        entity_weight = (self.interest_entity_weight if interest_entity_weight is None
+                         else interest_entity_weight) if self.entity_index is not None else 0.0
         interests = (build_interest_profiles(user, self.item_vectors, self.article_by_id,
                                              threshold=self.interest_threshold,
-                                             max_interests=self.max_interests)
+                                             max_interests=self.max_interests,
+                                             entity_index=self.entity_index,
+                                             entity_weight=entity_weight)
                      if multi_interest and profile.vector else [])
         queries = [interest.vector for interest in interests] or [profile.vector]
         per_query_pool = -(-candidate_pool_size // len(queries))
@@ -278,9 +297,12 @@ class Recommender:
         components = []
         for article in candidates:
             item_vector = self.item_vectors.vector(article.article_id)
-            # Against several interests, relevance is the cosine to the
-            # best-matching one. -1 means no interest: the single-profile
-            # path, or an article sharing no term with any interest.
+            # Against several interests, relevance is the word cosine to the
+            # best-matching one. Entities only shape how interests are formed:
+            # on the validation slice, blending entity cosine into this match
+            # lowered NDCG@10 at every weight tried (0.375 -> 0.354-0.365).
+            # -1 means no interest: the single-profile path, or an article
+            # sharing no term with any interest.
             interest_index = -1
             if interests:
                 similarities = [cosine_relevance(interest.vector, item_vector)

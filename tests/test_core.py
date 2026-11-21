@@ -11,6 +11,8 @@ from t3rec.candidates import generate_cluster_candidates
 from t3rec.pipeline import Recommender
 from t3rec.diversity import compare_diversity, diversity_rerank
 from t3rec.profiles import build_interest_profiles, build_user_profile, proportional_quotas
+from t3rec.entities import EntityIndex
+from t3rec.ltr import LinearRanker, pairwise_accuracy, train_pairwise
 from t3rec.scoring import (ScoreWeights, calculate_net_score, jaccard_similarity,
                            popularity_score, recency_score)
 from t3rec.text import TextConfig, preprocess_text
@@ -198,7 +200,7 @@ class CoreScoringTests(unittest.TestCase):
 
     def test_mind_ingestion_builds_and_reuses_deterministic_cache(self):
         repo = Path(__file__).resolve().parents[1]
-        with tempfile.TemporaryDirectory(dir=repo / "work") as temp:
+        with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             raw = root / "raw"
             raw.mkdir()
@@ -230,7 +232,7 @@ class CoreScoringTests(unittest.TestCase):
 
     def test_chronological_evaluation_writes_metrics_and_plots(self):
         repo = Path(__file__).resolve().parents[1]
-        with tempfile.TemporaryDirectory(dir=repo / "work") as temp:
+        with tempfile.TemporaryDirectory() as temp:
             dataset = ingest_mind(repo / "data/sample_mind", Path(temp) / "cache")
             split = chronological_split(dataset.impressions, test_fraction=0.2)
             self.assertLessEqual(max(row.timestamp for row in split.train), split.cutoff)
@@ -239,12 +241,13 @@ class CoreScoringTests(unittest.TestCase):
             self.assertEqual(result.summary["train_impressions"], 2)
             self.assertEqual(result.summary["test_impressions"], 1)
             self.assertEqual(result.summary["evaluated_impressions"], 1)
-            self.assertEqual(len(result.aggregate), 6)
+            self.assertEqual(len(result.aggregate), 8)
             self.assertEqual({row["Model"] for row in result.aggregate},
                              {"A. Popularity baseline", "B. TF-IDF cosine", "C. TF-IDF + Jaccard",
                               "D. TF-IDF + Jaccard + recency/popularity",
                               "E. Full model + diversity reranking",
-                              "F. Multi-interest profiles"})
+                              "F. Multi-interest profiles", "G. Entity-aware multi-interest",
+                              "H. Learning-to-rank"})
             popularity = next(row for row in result.aggregate
                               if row["Model"] == "A. Popularity baseline")
             # N1003 is clicked only in the held-out row. Train-only popularity
@@ -418,6 +421,92 @@ class MultiInterestTests(unittest.TestCase):
         unrelated = next(row for row in rows if row.article_id == "X")
         self.assertEqual(unrelated.interest, "")
         self.assertNotIn("matches your interest", unrelated.explanation)
+
+
+def _with_entities(article_id, title, entity_id, label):
+    entities = '[{"Label": "%s", "Type": "P", "WikidataId": "%s", "Confidence": 1.0}]' % (label, entity_id)
+    return Article(article_id, title, metadata={"title_entities": entities, "abstract_entities": "[]"})
+
+
+class EntityInterestTests(unittest.TestCase):
+    DOCS = [
+        _with_entities("H1", "fractured hand needs surgery", "Q1", "Gordon Hayward"),
+        _with_entities("K1", "pasta sauce recipe", "Q3", "Pasta"),
+        _with_entities("H2", "winning streak continues tonight", "Q2", "Boston Celtics"),
+        _with_entities("K2", "garlic bread dinner", "Q4", "Garlic"),
+    ]
+    EMBEDDINGS = {"Q1": [1.0, 0.0, 0.0], "Q2": [0.9, 0.1, 0.0],
+                  "Q3": [0.0, 0.0, 1.0], "Q4": [0.0, 0.1, 0.9]}
+
+    def setUp(self):
+        from array import array
+        self.by_id = {article.article_id: article for article in self.DOCS}
+        self.index = EntityIndex.build(self.by_id, {k: array("d", v) for k, v in self.EMBEDDINGS.items()})
+        self.vectors = build_item_vectors(self.DOCS)
+
+    def test_entity_vectors_are_centred_and_normalized(self):
+        from t3rec.entities import dot
+        hayward, celtics, pasta = (self.index.vector(a) for a in ("H1", "H2", "K1"))
+        self.assertAlmostEqual(dot(hayward, hayward), 1.0)
+        self.assertGreater(dot(hayward, celtics), 0.9)
+        self.assertLess(dot(hayward, pasta), 0.0)
+        self.assertEqual(self.index.labels["H1"], (("Gordon Hayward", 2.0),))
+
+    def test_entities_join_articles_that_share_no_words(self):
+        user = User("u", ("H1", "K1", "H2", "K2"))
+        words_only = build_interest_profiles(user, self.vectors, self.by_id, threshold=0.1, max_interests=4)
+        self.assertEqual(len(words_only), 4)
+        with_entities = build_interest_profiles(user, self.vectors, self.by_id, threshold=0.1, max_interests=4,
+                                                entity_index=self.index, entity_weight=0.5)
+        self.assertEqual([interest.members for interest in with_entities], [("H1", "H2"), ("K1", "K2")])
+        # Each name is mentioned by one of the two articles, so only one is shown.
+        self.assertIn(with_entities[0].label, {"Gordon Hayward", "Boston Celtics"})
+
+    def test_recommender_groups_with_entities_but_matches_by_words(self):
+        rec = Recommender(self.DOCS, entity_index=self.index, interest_entity_weight=0.5,
+                          max_interests=4, history_duplicate_threshold=None)
+        user = User("u", ("H1", "K1", "H2"))
+        rec.recommend(user, limit=1, candidate_mode="all", diverse=False, multi_interest=True)
+        grouped = rec.last_diagnostics["interests"]
+        self.assertEqual([interest["members"] for interest in grouped], [["H1", "H2"], ["K1"]])
+        self.assertIn(grouped[0]["label"], {"Gordon Hayward", "Boston Celtics"})
+        rec.recommend(user, limit=1, candidate_mode="all", diverse=False, multi_interest=True,
+                      interest_entity_weight=0.0)
+        self.assertEqual(len(rec.last_diagnostics["interests"]), 3)
+
+
+    def test_label_adds_a_second_name_only_when_shared(self):
+        from t3rec.profiles import _entity_label
+        index = EntityIndex({}, {"a": (("Gordon Hayward", 2.0), ("Boston Celtics", 1.0)),
+                                 "b": (("Gordon Hayward", 2.0), ("Boston Celtics", 1.0)),
+                                 "c": (("Gordon Hayward", 2.0), ("UConn Huskies", 3.0))})
+        self.assertEqual(_entity_label(["a", "b", "c"], index), "Gordon Hayward · Boston Celtics")
+        self.assertEqual(_entity_label(["c"], index), "UConn Huskies · Gordon Hayward")
+        self.assertEqual(_entity_label(["a", "c"], index), "Gordon Hayward")
+
+
+class LearningToRankTests(unittest.TestCase):
+    def test_pairwise_ranker_learns_the_informative_feature(self):
+        import random
+        rng = random.Random(0)
+        groups = []
+        for _ in range(60):
+            positives = [[1.0 + rng.gauss(0, 0.3), rng.gauss(0, 1)]]
+            negatives = [[rng.gauss(0, 0.3), rng.gauss(0, 1)] for _ in range(5)]
+            groups.append((positives, negatives))
+        ranker = train_pairwise(groups[:40], features=("signal", "noise"))
+        self.assertGreater(ranker.weights[0], 0)
+        self.assertGreater(ranker.weights[0], abs(ranker.weights[1]))
+        self.assertGreater(pairwise_accuracy(ranker, groups[40:]), 0.9)
+        self.assertEqual(ranker.rank({"a": [0.0, 0.0], "b": [1.0, 0.0]}), ["b", "a"])
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "model.json"
+            ranker.save(path)
+            self.assertEqual(LinearRanker.load(path).as_dict(), ranker.as_dict())
+
+    def test_training_needs_clicked_and_skipped_candidates(self):
+        with self.assertRaises(ValueError):
+            train_pairwise([([[1.0]], [])], features=("x",))
 
 
 if __name__ == "__main__":

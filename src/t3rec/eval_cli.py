@@ -6,6 +6,7 @@ import argparse
 import logging
 from pathlib import Path
 
+from .entities import EntityIndex
 from .evaluate import run_evaluation, write_evaluation
 from .ingest import ingest_mind
 
@@ -22,6 +23,8 @@ def main() -> None:
     parser.add_argument("--ks", default="5,10", help="Comma-separated positive cutoffs, e.g. 5,10")
     parser.add_argument("--diversity-lambda", type=float, default=0.75,
                         help="Relevance weight λ for greedy diversity reranking")
+    parser.add_argument("--ltr-impressions", type=int, default=6000,
+                        help="Training-period impressions sampled to fit the learning-to-rank model")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     ks = tuple(int(part.strip()) for part in args.ks.split(",") if part.strip())
@@ -29,8 +32,10 @@ def main() -> None:
     output_dir = Path(args.output_dir)
     cache_dir = Path(args.cache_dir) if args.cache_dir else output_dir / "cache"
     dataset = ingest_mind(raw_dir, cache_dir)
+    entity_index = EntityIndex.from_mind(raw_dir, dataset.articles)
     result = run_evaluation(dataset, test_fraction=args.test_fraction, ks=ks,
-                            diversity_lambda=args.diversity_lambda)
+                            diversity_lambda=args.diversity_lambda, entity_index=entity_index,
+                            ltr_impressions=args.ltr_impressions)
     write_evaluation(result, output_dir, ks)
     logging.getLogger("t3rec.evaluate").info(
         "Chronological cutoff %s: %d train, %d test, %d evaluable impressions across %d users",

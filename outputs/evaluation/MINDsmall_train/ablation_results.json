@@ -57,6 +57,24 @@
           "recency": 0.05,
           "relevance": 0.75
         }
+      },
+      "G. Entity-aware multi-interest": {
+        "description": "Model F, but interests are formed and matched with word cosine blended with the cosine of centred Wikidata entity vectors, and labelled by entity names.",
+        "diversity": false,
+        "entity_interests": true,
+        "multi_interest": true,
+        "weights": {
+          "jaccard": 0.1,
+          "popularity": 0.1,
+          "recency": 0.05,
+          "relevance": 0.75
+        }
+      },
+      "H. Learning-to-rank": {
+        "description": "Pairwise logistic (linear RankNet) ranker over eight IR features, trained on clicks from the latest slice of the training period; no hand-set weights.",
+        "diversity": false,
+        "learned": true,
+        "weights": null
       }
     },
     "aggregation": "Macro-average query metrics within each user, then macro-average users.",
@@ -64,6 +82,7 @@
     "catalog_size": 51278,
     "cutoff": "2019-11-13T20:36:19",
     "diversity_lambda": 0.75,
+    "entity_policy": "Centred MIND entity embeddings. Model G groups the history with (1 - w) * word cosine + w * entity cosine, w = 0.3; every model matches candidates by word cosine; entity similarity is an LTR feature; interest labels use entity names.",
     "evaluated_impressions": 31290,
     "evaluated_users": 20654,
     "evaluation_set_sha256": "c718dc653add3995188b0374316ede38883cb0be46a7b533c66f4f3394452fac",
@@ -76,6 +95,65 @@
       5,
       10
     ],
+    "learning_to_rank": {
+      "check_impressions": 1200,
+      "check_pairwise_accuracy": 0.6451989481186562,
+      "model": {
+        "features": [
+          "cosine",
+          "cosine_scaled",
+          "jaccard_scaled",
+          "recency",
+          "popularity",
+          "interest_similarity",
+          "entity_similarity",
+          "category_match"
+        ],
+        "mean": [
+          0.02490042385965104,
+          0.2525632902654203,
+          0.31429891086063966,
+          0.9458069710330731,
+          0.31820566138455075,
+          0.02815125356781029,
+          0.10255818038191997,
+          0.14780859998328566
+        ],
+        "scale": [
+          0.026261160723540417,
+          0.24659802191740046,
+          0.2725520227878754,
+          0.047693432889294084,
+          0.24930824890670913,
+          0.031188882384114172,
+          0.2790841794907478,
+          0.19030427663382968
+        ],
+        "weights": [
+          0.05227330149573516,
+          0.054739543223356064,
+          0.10101832372562383,
+          0.19896598437753932,
+          0.17294613228031014,
+          0.09680405468531188,
+          0.2059228664843308,
+          0.0677793231853792
+        ]
+      },
+      "standardized_weights": {
+        "category_match": 0.0677793231853792,
+        "cosine": 0.05227330149573516,
+        "cosine_scaled": 0.054739543223356064,
+        "entity_similarity": 0.2059228664843308,
+        "interest_similarity": 0.09680405468531188,
+        "jaccard_scaled": 0.10101832372562383,
+        "popularity": 0.17294613228031014,
+        "recency": 0.19896598437753932
+      },
+      "status": "trained",
+      "training_impressions": 4799,
+      "training_period": "impressions after 2019-11-13T10:31:15 up to the evaluation cutoff"
+    },
     "missing_timestamp_impressions_omitted": 0,
     "normalization": "Cosine and Jaccard are divided by their maximum over each impression's candidates; then weighted mean: sum(weight_i * component_i) / sum(weight_i).",
     "popularity_policy": "Click counts from training impressions only.",
@@ -171,6 +249,34 @@
       "P@5": 0.10156589246910736,
       "R@10": 0.5647328502573343,
       "R@5": 0.4058957854165146
+    },
+    {
+      "AvgPairwiseSimilarity@10": 0.010913099359622314,
+      "AvgPairwiseSimilarity@5": 0.017900584733549853,
+      "CategoryDiversity@10": 0.6229574212789429,
+      "CategoryDiversity@5": 0.7156151519848625,
+      "Coverage": 0.07118062326923827,
+      "Model": "G. Entity-aware multi-interest",
+      "NDCG@10": 0.34788499358680075,
+      "NDCG@5": 0.2935963088885621,
+      "P@10": 0.07317846639927109,
+      "P@5": 0.10227557157667548,
+      "R@10": 0.5650215644263329,
+      "R@5": 0.4076074443444487
+    },
+    {
+      "AvgPairwiseSimilarity@10": 0.011304385502695776,
+      "AvgPairwiseSimilarity@5": 0.01745197895722318,
+      "CategoryDiversity@10": 0.5622820813057672,
+      "CategoryDiversity@5": 0.6455707935641605,
+      "Coverage": 0.06443309021412692,
+      "Model": "H. Learning-to-rank",
+      "NDCG@10": 0.3734309501421127,
+      "NDCG@5": 0.31659203115066326,
+      "P@10": 0.0783986049751761,
+      "P@5": 0.1092018924341961,
+      "R@10": 0.5987442015087886,
+      "R@5": 0.43513433333736723
     }
   ]
 }

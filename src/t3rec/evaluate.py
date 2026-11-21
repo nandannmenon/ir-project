@@ -11,6 +11,7 @@ import csv
 import hashlib
 import json
 import logging
+import random
 from collections import Counter, defaultdict
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -19,7 +20,9 @@ from statistics import mean
 from typing import Iterable
 from xml.sax.saxutils import escape
 
+from .entities import EntityIndex
 from .ingest import Impression, ProcessedDataset
+from .ltr import FEATURES, LinearRanker, impression_features, pairwise_accuracy, train_pairwise
 from .models import Article, User
 from .pipeline import Recommender
 from .scoring import ScoreWeights, calculate_net_score
@@ -27,6 +30,9 @@ from .diversity import diversity_rerank
 from .vectorize import ItemVectors, cosine_similarity
 
 LOGGER = logging.getLogger("t3rec.evaluate")
+# Entity weight for grouping the history in model G: the best entity setting
+# found by ``tune_cli --grid entity`` on the validation slice.
+ENTITY_GROUPING_WEIGHT = 0.3
 MODEL_CONFIGS: dict[str, dict[str, object]] = {
     "A. Popularity baseline": {
         "description": "Rank displayed eligible articles by training-period click count.",
@@ -58,6 +64,17 @@ MODEL_CONFIGS: dict[str, dict[str, object]] = {
                         "proportion to interest size."),
         "weights": {"relevance": 0.75, "jaccard": 0.10, "recency": 0.05, "popularity": 0.10},
         "diversity": False, "multi_interest": True,
+    },
+    "G. Entity-aware multi-interest": {
+        "description": ("Model F, but interests are formed and matched with word cosine blended with "
+                        "the cosine of centred Wikidata entity vectors, and labelled by entity names."),
+        "weights": {"relevance": 0.75, "jaccard": 0.10, "recency": 0.05, "popularity": 0.10},
+        "diversity": False, "multi_interest": True, "entity_interests": True,
+    },
+    "H. Learning-to-rank": {
+        "description": ("Pairwise logistic (linear RankNet) ranker over eight IR features, trained on "
+                        "clicks from the latest slice of the training period; no hand-set weights."),
+        "weights": None, "diversity": False, "learned": True,
     },
 }
 MODEL_NAMES = tuple(MODEL_CONFIGS)
@@ -199,42 +216,121 @@ def _svg_bars(path: Path, title: str, series: list[tuple[str, list[float]]], lab
     path.write_text("\n".join(parts), encoding="utf-8")
 
 
-def run_evaluation(dataset: ProcessedDataset, *, test_fraction: float = 0.2,
-                   ks: tuple[int, ...] = (5, 10), diversity_lambda: float = 0.75) -> EvaluationOutput:
-    """Evaluate fixed ablation models on the same impression-level future clicks."""
-    if not ks or any(k < 1 for k in ks):
-        raise ValueError("ks must contain positive values")
-    split = chronological_split(dataset.impressions, test_fraction)
-    train_clicks: Counter[str] = Counter()
-    first_train_shown: dict[str, datetime] = {}
-    read_in_train: set[str] = set()
-    for row in split.train:
-        train_clicks.update(row.clicked)
-        read_in_train.update(row.history)
+def _training_signals(dataset: ProcessedDataset, train_rows: Iterable[Impression],
+                      cutoff: datetime) -> tuple[Counter[str], dict[str, Article]]:
+    """Click counts and freshness-proxy timestamps known at ``cutoff``.
+
+    MIND news.tsv has no publish timestamp, so freshness uses what the system
+    could know at the cutoff: the first training impression that showed the
+    article; the log start for articles only seen in reading histories (read
+    before the log began); and the cutoff itself for articles never seen
+    before it, which are new in the following period.
+    """
+    clicks: Counter[str] = Counter()
+    first_shown: dict[str, datetime] = {}
+    read: set[str] = set()
+    rows = list(train_rows)
+    for row in rows:
+        clicks.update(row.clicked)
+        read.update(row.history)
         assert row.timestamp is not None
         for article_id in row.shown:
-            previous = first_train_shown.get(article_id)
+            previous = first_shown.get(article_id)
             if previous is None or row.timestamp < previous:
-                first_train_shown[article_id] = row.timestamp
-    log_start = min(row.timestamp for row in split.train if row.timestamp is not None)
+                first_shown[article_id] = row.timestamp
+    log_start = min(row.timestamp for row in rows if row.timestamp is not None)
 
-    # MIND news.tsv has no publish timestamp, so freshness uses what the
-    # system could know at the cutoff: the first training impression that
-    # showed the article; the log start for articles only seen in reading
-    # histories (read before the log began); and the cutoff itself for
-    # articles never seen before it, which are new in the test period.
     def freshness_proxy(article_id: str) -> datetime:
-        if article_id in first_train_shown:
-            return first_train_shown[article_id]
-        return log_start if article_id in read_in_train else split.cutoff
+        if article_id in first_shown:
+            return first_shown[article_id]
+        return log_start if article_id in read else cutoff
 
-    eval_articles = {
+    articles = {
         article_id: (article if article.timestamp is not None else
                      replace(article, timestamp=freshness_proxy(article_id)))
         for article_id, article in dataset.articles.items()
     }
+    return clicks, articles
+
+
+def _learning_features(recommender: Recommender, user: User, shown: set[str], as_of: datetime | None,
+                       entity_index: EntityIndex | None,
+                       rows: list | None = None) -> dict[str, list[float]]:
+    """LTR feature vectors for one impression's candidates, in ``ltr.FEATURES`` order."""
+    if rows is None:
+        rows = recommender.recommend(user, limit=len(shown), as_of=as_of, candidate_mode="all",
+                                     diverse=False, score_weights=ScoreWeights(), candidate_ids=shown)
+    multi = recommender.recommend(user, limit=len(shown), as_of=as_of, candidate_mode="all",
+                                  diverse=False, score_weights=ScoreWeights(), candidate_ids=shown,
+                                  multi_interest=True)
+    entity_profile = entity_index.profile(user.history) if entity_index is not None else None
+    return impression_features(rows, {row.article_id: row.relevance for row in multi},
+                               entity_profile, entity_index)
+
+
+def _train_ranker(dataset: ProcessedDataset, train_rows: tuple[Impression, ...], *,
+                  entity_index: EntityIndex | None, validation_fraction: float,
+                  max_impressions: int) -> tuple[LinearRanker | None, dict[str, object]]:
+    """Fit the pairwise ranker on the latest ``validation_fraction`` of the training period.
+
+    Features for that slice use signals known before it (its own inner cutoff),
+    mirroring how test features use signals known before the test cutoff.
+    80% of the sampled impressions train the model; 20% report its pairwise
+    accuracy, a sanity check that touches no test data.
+    """
+    try:
+        inner = chronological_split(train_rows, validation_fraction)
+    except ValueError as error:
+        return None, {"status": f"skipped: {error}"}
+    clicks, articles = _training_signals(dataset, inner.train, inner.cutoff)
+    trainer = Recommender.from_processed(replace(dataset, articles=articles, click_counts=dict(clicks)),
+                                         entity_index=entity_index)
+    eligible = []
+    for row in inner.test:
+        shown = {aid for aid in row.shown if aid in trainer.available_article_ids} - set(row.history)
+        if set(row.clicked) & shown and len(shown) > 1:
+            eligible.append((row, shown))
+    sample = random.Random(13).sample(eligible, min(max_impressions, len(eligible)))
+    groups = []
+    for row, shown in sample:
+        features = _learning_features(trainer, User(row.user_id, row.history), shown,
+                                      row.timestamp, entity_index)
+        clicked = set(row.clicked)
+        positives = [values for aid, values in features.items() if aid in clicked]
+        negatives = [values for aid, values in features.items() if aid not in clicked]
+        if positives and negatives:
+            groups.append((positives, negatives))
+    if len(groups) < 2:
+        return None, {"status": "skipped: too few training impressions"}
+    split_at = max(1, int(len(groups) * 0.8))
+    ranker = train_pairwise(groups[:split_at])
+    return ranker, {
+        "status": "trained",
+        "training_period": f"impressions after {inner.cutoff.isoformat()} up to the evaluation cutoff",
+        "training_impressions": split_at,
+        "check_impressions": len(groups) - split_at,
+        "check_pairwise_accuracy": pairwise_accuracy(ranker, groups[split_at:]),
+        "standardized_weights": dict(zip(FEATURES, ranker.weights)),
+        "model": ranker.as_dict(),
+    }
+
+
+def run_evaluation(dataset: ProcessedDataset, *, test_fraction: float = 0.2,
+                   ks: tuple[int, ...] = (5, 10), diversity_lambda: float = 0.75,
+                   entity_index: EntityIndex | None = None,
+                   ltr_validation_fraction: float = 0.125,
+                   ltr_impressions: int = 6000) -> EvaluationOutput:
+    """Evaluate fixed ablation models on the same impression-level future clicks."""
+    if not ks or any(k < 1 for k in ks):
+        raise ValueError("ks must contain positive values")
+    split = chronological_split(dataset.impressions, test_fraction)
+    train_clicks, eval_articles = _training_signals(dataset, split.train, split.cutoff)
+    ranker, ltr_summary = _train_ranker(dataset, split.train, entity_index=entity_index,
+                                        validation_fraction=ltr_validation_fraction,
+                                        max_impressions=ltr_impressions)
+    LOGGER.info("Learning-to-rank: %s", ltr_summary.get("status"))
     eval_dataset = replace(dataset, articles=eval_articles, click_counts=dict(train_clicks))
-    recommender = Recommender.from_processed(eval_dataset)
+    recommender = Recommender.from_processed(eval_dataset, entity_index=entity_index)
     max_k = max(ks)
     weights_cosine = ScoreWeights(alpha=1, beta=0, gamma=0, delta=0)
     weights_cosine_jaccard = ScoreWeights(alpha=0.90, beta=0.10, gamma=0, delta=0)
@@ -293,9 +389,21 @@ def run_evaluation(dataset: ProcessedDataset, *, test_fraction: float = 0.2,
         # its own call with limit=max_k rather than re-sorted from ``scored``.
         multi_interest_ranked = [item.article_id for item in recommender.recommend(
             user, limit=max_k, as_of=row.timestamp, candidate_mode="all", diverse=False,
-            score_weights=weights_full, candidate_ids=shown, multi_interest=True)]
+            score_weights=weights_full, candidate_ids=shown, multi_interest=True,
+            interest_entity_weight=0.0)]
+        entity_interest_ranked = [item.article_id for item in recommender.recommend(
+            user, limit=max_k, as_of=row.timestamp, candidate_mode="all", diverse=False,
+            score_weights=weights_full, candidate_ids=shown, multi_interest=True,
+            interest_entity_weight=ENTITY_GROUPING_WEIGHT if entity_index is not None else 0.0)]
+        if ranker is not None:
+            features = _learning_features(recommender, user, shown, row.timestamp, entity_index,
+                                          rows=scored)
+            learned_ranked = ranker.rank(features)[:max_k]
+        else:
+            learned_ranked = full_ranked
         rankings = dict(zip(MODEL_NAMES, (popularity_ranked, cosine_ranked, jaccard_ranked,
-                                           full_ranked, diverse_ranked, multi_interest_ranked)))
+                                           full_ranked, diverse_ranked, multi_interest_ranked,
+                                           entity_interest_ranked, learned_ranked)))
         for model_name, ranked in rankings.items():
             all_recommended[model_name].update(ranked[:max_k])
             user_recommended[row.user_id][model_name].update(ranked[:max_k])
@@ -357,6 +465,12 @@ def run_evaluation(dataset: ProcessedDataset, *, test_fraction: float = 0.2,
         "normalization": ("Cosine and Jaccard are divided by their maximum over each impression's "
                           "candidates; then weighted mean: sum(weight_i * component_i) / sum(weight_i)."),
         "tuning_policy": "Fixed component weights specified before evaluation; no evaluation-set tuning.",
+        "entity_policy": ("Centred MIND entity embeddings. Model G groups the history with "
+                          f"(1 - w) * word cosine + w * entity cosine, w = {ENTITY_GROUPING_WEIGHT}; "
+                          "every model matches candidates by word cosine; entity similarity is an "
+                          "LTR feature; interest labels use entity names."
+                          if entity_index is not None else "No entity index: G equals F"),
+        "learning_to_rank": ltr_summary,
         "catalog_size": catalog_size,
     }
     return EvaluationOutput(split, tuple(aggregate_rows), tuple(per_user_rows), summary)
@@ -393,7 +507,7 @@ def write_evaluation(output: EvaluationOutput, output_dir: str | Path, ks: tuple
             writer.writerows(output.aggregate)
     models = [str(row["Model"]) for row in output.aggregate]
     plot_labels = ["A Popularity", "B Cosine", "C + Jaccard", "D + quality", "E + diversity",
-                   "F Multi-interest"]
+                   "F Multi-interest", "G Entity interests", "H Learned"]
     if len(plot_labels) != len(models):
         plot_labels = models
     quality_metrics = [name for k in ks for name in (f"P@{k}", f"R@{k}")]

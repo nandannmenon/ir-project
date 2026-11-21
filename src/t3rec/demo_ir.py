@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from datetime import datetime
 
 from .candidates import generate_candidates
+from .entities import EntityIndex
 from .ingest import ProcessedDataset, ingest_mind
 from .models import User
 from .pipeline import Recommender
@@ -30,7 +31,7 @@ def _component_contributions(recommendation: object) -> list[tuple[str, float]]:
 
 def run_demo(dataset: ProcessedDataset, user_id: str, *, k: int = 5,
              show_candidates: int = 8, inspect_term: str | None = None,
-             multi_interest: bool = False) -> None:
+             multi_interest: bool = False, entity_index: EntityIndex | None = None) -> None:
     """Print a complete inspectable recommendation trace for a dataset user."""
     if k < 1 or show_candidates < 1:
         raise ValueError("k and show_candidates must be positive")
@@ -42,7 +43,7 @@ def run_demo(dataset: ProcessedDataset, user_id: str, *, k: int = 5,
                  key=lambda row: (row.timestamp is not None,
                                   row.timestamp or datetime.min, row.impression_id))
     user = User(user_id, latest.history)
-    recommender = Recommender.from_processed(dataset)
+    recommender = Recommender.from_processed(dataset, entity_index=entity_index)
     profile = recommender.profile(user, as_of=latest.timestamp)
     results = recommender.recommend(user, limit=show_candidates, as_of=latest.timestamp,
                                     candidate_mode="champions", diverse=False,
@@ -79,7 +80,8 @@ def run_demo(dataset: ProcessedDataset, user_id: str, *, k: int = 5,
         print("  (empty profile; the recommender is in cold-start mode)")
     if multi_interest and diagnostics["interests"]:
         print(f"\n1b. INTERESTS (leader clustering of the history, threshold "
-              f"{recommender.interest_threshold}, at most {recommender.max_interests})")
+              f"{recommender.interest_threshold}, at most {recommender.max_interests}, "
+              f"entity weight {recommender.interest_entity_weight})")
         quotas = diagnostics["interest_quotas"] or [show_candidates]
         for interest, quota in zip(diagnostics["interests"], quotas):
             print(f"  '{interest['label']}' [{interest['category'] or '-'}]: "
@@ -185,7 +187,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     dataset = ingest_mind(args.raw_dir, args.cache_dir)
     try:
         run_demo(dataset, args.user, k=args.k, show_candidates=args.show_candidates,
-                 inspect_term=args.term, multi_interest=args.multi_interest)
+                 inspect_term=args.term, multi_interest=args.multi_interest,
+                 entity_index=EntityIndex.from_mind(args.raw_dir, dataset.articles))
     except ValueError as exc:
         parser.error(str(exc))
 
