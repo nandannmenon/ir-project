@@ -78,6 +78,10 @@ class LinearRanker:
         return sum(weight * (value - mean) / scale
                    for weight, value, mean, scale in zip(self.weights, values, self.mean, self.scale))
 
+    def probability(self, values: Sequence[float]) -> float:
+        """The score squashed to (0, 1), so it can stand in for a net score."""
+        return _sigmoid(self.score(values))
+
     def rank(self, features: Mapping[str, Sequence[float]]) -> list[str]:
         """Article IDs by descending score, ties broken by ID."""
         return sorted(features, key=lambda article_id: (-self.score(features[article_id]), article_id))
@@ -90,9 +94,18 @@ class LinearRanker:
         Path(path).write_text(json.dumps(self.as_dict(), indent=2), encoding="utf-8")
 
     @classmethod
+    def from_dict(cls, data: Mapping[str, object]) -> "LinearRanker":
+        return cls(tuple(data["features"]), list(data["weights"]), list(data["mean"]), list(data["scale"]))
+
+    @classmethod
     def load(cls, path: str | Path) -> "LinearRanker":
+        """Read a saved model, or the model inside an evaluation ``run_summary.json``."""
         data = json.loads(Path(path).read_text(encoding="utf-8"))
-        return cls(tuple(data["features"]), data["weights"], data["mean"], data["scale"])
+        if "learning_to_rank" in data:
+            data = data["learning_to_rank"].get("model") or {}
+        if "weights" not in data:
+            raise ValueError(f"{path} holds no trained learning-to-rank model")
+        return cls.from_dict(data)
 
 
 def _sigmoid(value: float) -> float:

@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from .data import load_json_fixture
 from .entities import EntityIndex
+from .ltr import LinearRanker
 from .ingest import ingest_mind
 from .models import User
 from .pipeline import Recommender
@@ -24,15 +25,20 @@ WEB_ROOT = Path(__file__).resolve().parent / "web"
 class Workbench:
     """Small JSON facade over the recommender, shared by the HTTP routes."""
 
-    def __init__(self, recommender: Recommender, users: list[User]):
+    def __init__(self, recommender: Recommender, users: list[User],
+                 ranker: LinearRanker | None = None):
         self.recommender = recommender
         self.users = {user.user_id: user for user in users}
+        self.ranker = ranker
 
     def state(self) -> dict[str, Any]:
         return {
             "article_count": len(self.recommender.articles),
             "user_count": len(self.users),
             "candidate_modes": ["champions", "clusters", "all"],
+            "learned_available": self.ranker is not None,
+            "entities_available": bool(self.recommender.entity_index is not None
+                                       and self.recommender.entity_index.labels),
             "users": [
                 {"user_id": user.user_id, "history": list(user.history)}
                 for user in sorted(self.users.values(), key=lambda user: user.user_id)[:300]
@@ -79,6 +85,8 @@ class Workbench:
             candidate_pool_size=pool_size, diverse=bool(payload.get("diverse", True)),
             diversity_relevance_weight=float(payload.get("diversity_relevance_weight", 0.75)),
             score_weights=weights, multi_interest=bool(payload.get("multi_interest", False)),
+            ranker=self.ranker if payload.get("learned") else None,
+            entity_labels=bool(payload.get("entity_labels", True)),
         )
         diagnostics = self.recommender.last_diagnostics
         profile = diagnostics.get("profile_vector", {})
@@ -90,6 +98,7 @@ class Workbench:
             "candidate_count": diagnostics.get("candidate_count", 0),
             "history_copies_removed": len(diagnostics.get("history_copies_removed", [])),
             "recency_available": diagnostics.get("recency_available", False),
+            "learned": diagnostics.get("learned_ranking", False),
             "interests": [{key: interest[key] for key in ("label", "category", "size")}
                           for interest in diagnostics.get("interests", [])],
             "profile_terms": [
@@ -182,6 +191,8 @@ def main() -> None:
     parser.add_argument("--cache-dir", default=str(ROOT / "data/processed/ui"))
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--ltr-model", help="Trained ranker: a run_summary.json from eval_cli or a saved "
+                                            "model (default: outputs/evaluation/MINDsmall_train/run_summary.json)")
     args = parser.parse_args()
 
     if args.raw_dir:
@@ -194,7 +205,16 @@ def main() -> None:
         clicks = Counter(article_id for user in users for article_id in user.history)
         recommender = Recommender(articles, click_counts=clicks)
 
-    server = ThreadingHTTPServer((args.host, args.port), build_handler(Workbench(recommender, users)))
+    ranker = None
+    model_path = Path(args.ltr_model) if args.ltr_model else ROOT / "outputs/evaluation/MINDsmall_train/run_summary.json"
+    if model_path.is_file():
+        try:
+            ranker = LinearRanker.load(model_path)
+            print(f"Learned ranking model: {model_path}")
+        except (ValueError, KeyError) as error:
+            print(f"Learned ranking unavailable: {error}")
+    server = ThreadingHTTPServer((args.host, args.port),
+                                 build_handler(Workbench(recommender, users, ranker)))
     print(f"T3 recommender workbench: http://{args.host}:{args.port}")
     try:
         server.serve_forever()

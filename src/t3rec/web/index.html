@@ -67,6 +67,8 @@
 
         <div class="diversity-control">
           <label class="toggle-label"><input id="multi-interest" type="checkbox"><span class="toggle-track"></span><span>Multi-interest profile</span></label>
+          <label class="toggle-label" title="Name interests by the people, places and teams their articles mention"><input id="entity-labels" type="checkbox" checked><span class="toggle-track"></span><span>Entity interest names</span></label>
+          <label class="toggle-label" title="Rank with weights learned from clicks instead of the hand-set weights"><input id="learned" type="checkbox"><span class="toggle-track"></span><span>Learned ranking (LTR)</span></label>
           <label class="toggle-label"><input id="diversify" type="checkbox" checked><span class="toggle-track"></span><span>Diversity reranking</span></label>
           <label class="lambda-row" for="lambda"><span>Relevance ↔ variety</span><output id="lambda-value">75%</output></label>
           <input id="lambda" type="range" min="0" max="100" value="75">

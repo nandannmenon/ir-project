@@ -19,6 +19,7 @@ function renderRecommendations(payload) {
     ? `${payload.recommendations.length} stories for ${payload.user_id}` : `No eligible stories for ${payload.user_id}`;
   $('#mode-badge').textContent = payload.mode.replace('_', ' ').toUpperCase();
   $('#candidate-stat').textContent = `${payload.candidate_count} candidates · ${payload.candidate_mode}` +
+    (payload.learned ? ' · learned ranking' : '') +
     (payload.history_copies_removed ? ` · ${payload.history_copies_removed} already-read copies hidden` : '');
 
   const strip = $('#profile-strip');
@@ -105,6 +106,8 @@ async function runRecommendations() {
         limit: $('#top-k').value, candidate_pool_size: $('#candidate-pool').value,
         candidate_mode: $('#candidate-mode').value, diverse: $('#diversify').checked,
         multi_interest: $('#multi-interest').checked,
+        entity_labels: $('#entity-labels').checked,
+        learned: $('#learned').checked,
         diversity_relevance_weight: Number($('#lambda').value) / 100, weights
       })
     });
@@ -122,6 +125,9 @@ async function start() {
     const data = await request('/api/state');
     state.users = data.users;
     $('#catalog-count').textContent = `${data.article_count.toLocaleString()} ARTICLES`;
+    // Add-on toggles stay disabled when their data is missing (no MIND entities, no trained model).
+    $('#learned').disabled = !data.learned_available;
+    $('#entity-labels').disabled = !data.entities_available;
     const selector = $('#user-select');
     for (const user of data.users) {
       const option = document.createElement('option');
@@ -137,6 +143,10 @@ async function start() {
     $('#run-button').addEventListener('click', runRecommendations);
     $('#lambda').addEventListener('input', (event) => {
       $('#lambda-value').value = `${event.target.value}%`;
+    });
+    // Learned ranking ignores the hand-set weights, so grey them out while it is on.
+    $('#learned').addEventListener('change', (event) => {
+      document.querySelectorAll('[data-weight]').forEach((input) => { input.disabled = event.target.checked; });
     });
     $('#diversify').addEventListener('change', (event) => {
       $('#lambda').disabled = !event.target.checked;

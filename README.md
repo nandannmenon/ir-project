@@ -6,48 +6,142 @@ An inspectable content-based news recommender built on Microsoft's MIND dataset.
 
 **Also added: entities and learning to rank.** MIND tags articles with Wikidata entities and ships an embedding per entity. Each article gets a centred entity vector, interests are labelled by the entity names their articles share ("Gordon Hayward", "Ukraine · Donald Trump"), and entity similarity is one of eight features of a pairwise learning-to-rank model that replaces the hand-set fusion weights with weights learned from training-period clicks.
 
-## Requirements
+## Setup (Windows and macOS)
 
-- Python 3.10 or newer (tested on Windows 11 with Python 3.12 and 3.14).
-- Standard library only — nothing to `pip install`.
-- For the MIND experiments: about 2 GB of free memory and the MINDsmall training split (see [Get the MIND data](#get-the-mind-data)).
+Everything runs on Python's standard library: there is nothing to `pip install`. Each step shows the Windows (PowerShell) command first, then the macOS (Terminal) one.
 
-Run every command from the repository root with `src` on the Python path:
+### 1. Install Python 3.10+ and Git
 
-| Shell | Once per terminal | Python command |
-| --- | --- | --- |
-| Windows PowerShell | `$env:PYTHONPATH = "src"` | `python` |
-| macOS / Linux | `export PYTHONPATH=src` | `python3` |
+- **Windows:** install Python from [python.org](https://www.python.org/downloads/) (tick **"Add python.exe to PATH"** in the installer) and Git from [git-scm.com](https://git-scm.com/download/win).
+- **macOS:** install Python from [python.org](https://www.python.org/downloads/) or with Homebrew (`brew install python`). Git comes with the Xcode command-line tools: run `xcode-select --install` if `git --version` fails.
 
-The commands below are written with `python`; use `python3` on macOS/Linux if `python` is not Python 3.
+Check both work:
 
-## Quick start (no download needed)
+```powershell
+# Windows
+python --version
+git --version
+```
 
-```text
+```bash
+# macOS
+python3 --version
+git --version
+```
+
+### 2. Get the code
+
+```powershell
+# Windows
+git clone https://github.com/nandannmenon/ir-project.git
+cd ir-project
+```
+
+```bash
+# macOS
+git clone https://github.com/nandannmenon/ir-project.git
+cd ir-project
+```
+
+Run every later command from this `ir-project` folder.
+
+### 3. Point Python at the code
+
+Do this **in every new terminal window** before running anything; without it Python reports `No module named 't3rec'`.
+
+```powershell
+# Windows
+$env:PYTHONPATH = "src"
+```
+
+```bash
+# macOS
+export PYTHONPATH=src
+```
+
+### 4. Check it works (no download needed)
+
+```powershell
+# Windows
 python -m unittest discover -s tests
-python -m t3rec.cli --fixture data/synthetic.json --user U1 --top-k 3
-python -m t3rec.demo_ir --user U_SAMPLE_1 --k 3
 python -m t3rec.web --port 8765
 ```
 
-Open http://127.0.0.1:8765, pick reader **U1**, and click **Run recommendations**. Turn on **Multi-interest profile** to see the reader's interests and which one each result serves. `data/synthetic.json` is a hand-written 10-article toy catalog and `data/sample_mind/` is a 5-article sample in MIND's TSV layout; both are smoke tests, too small for quality conclusions.
+```bash
+# macOS
+python3 -m unittest discover -s tests
+python3 -m t3rec.web --port 8765
+```
 
-More CLI options on the toy catalog: `--all-users --cold-start --compare-weights` runs every reader plus a cold-start reader under two weight settings, and `--compare-diversity` compares plain top-K with diversity-reranked top-K from the same candidate pool.
+All tests should pass. Then open http://127.0.0.1:8765, pick reader **U1**, and click **Run recommendations**; press Ctrl+C in the terminal to stop the server. This uses `data/synthetic.json`, a hand-written 10-article toy catalog. `data/sample_mind/` is a 5-article sample in MIND's format; both are smoke tests only.
 
-## Get the MIND data
+More options on the toy catalog (`python -m t3rec.cli --fixture data/synthetic.json --user U1 --top-k 3`): `--all-users --cold-start --compare-weights` runs every reader plus a cold-start reader under two weight settings, and `--compare-diversity` compares plain top-K with diversity-reranked top-K from the same candidate pool.
+
+### 5. Get the MIND data
+
+The dataset is not in this repository: its license does not allow redistribution, and it is too large for GitHub.
 
 1. Download **MINDsmall_train** from the [official Microsoft page](https://learn.microsoft.com/en-us/azure/open-datasets/dataset-microsoft-news) and review the Microsoft Research License Terms.
-2. Extract it so these files exist:
+2. Extract it into `data/raw/MINDsmall_train` (these commands assume the zip is in your Downloads folder):
+
+   ```powershell
+   # Windows
+   Expand-Archive -Path "$HOME\Downloads\MINDsmall_train.zip" -DestinationPath data\raw\MINDsmall_train
+   Get-ChildItem data\raw\MINDsmall_train
+   ```
+
+   ```bash
+   # macOS
+   mkdir -p data/raw/MINDsmall_train
+   unzip ~/Downloads/MINDsmall_train.zip -d data/raw/MINDsmall_train
+   ls data/raw/MINDsmall_train
+   ```
+
+3. Check that these three files sit **directly** in `data/raw/MINDsmall_train`:
+
    ```text
    data/raw/MINDsmall_train/news.tsv
    data/raw/MINDsmall_train/behaviors.tsv
-   ```
-3. Build the processed cache (cleaned records and TF-IDF rows; built once, then reused):
-   ```text
-   python -m t3rec.ingest_cli --raw-dir data/raw/MINDsmall_train --output-dir data/processed/MINDsmall_train
+   data/raw/MINDsmall_train/entity_embedding.vec
    ```
 
-The dataset is not in this repository: `data/raw/`, `data/processed/` and `outputs/**/cache/` are Git-ignored. Do not commit MIND files. Ingestion fingerprints both TSV files and the preprocessing settings, so a matching cache is reused and changed inputs trigger a rebuild (`--force` rebuilds explicitly).
+   Some copies of the zip contain their own `MINDsmall_train` folder. If you see `data/raw/MINDsmall_train/MINDsmall_train/news.tsv`, move the files up one level (or extract into `data/raw` instead). `entity_embedding.vec` is needed for the entity features: without it the system still runs, but interest labels fall back to top words and the learning-to-rank results will not match this README.
+
+### 6. Build the processed cache (once)
+
+This cleans the articles and builds the TF-IDF index; later runs reuse it.
+
+```powershell
+# Windows
+python -m t3rec.ingest_cli --raw-dir data/raw/MINDsmall_train --output-dir data/processed/MINDsmall_train
+```
+
+```bash
+# macOS
+python3 -m t3rec.ingest_cli --raw-dir data/raw/MINDsmall_train --output-dir data/processed/MINDsmall_train
+```
+
+`data/raw/`, `data/processed/` and `outputs/**/cache/` are Git-ignored: never commit MIND files. The cache records a fingerprint of both TSV files and the preprocessing settings, so changed inputs trigger a rebuild (`--force` rebuilds explicitly).
+
+### 7. Run the system on MIND
+
+```powershell
+# Windows
+python -m t3rec.web --raw-dir data/raw/MINDsmall_train --cache-dir data/processed/MINDsmall_train --port 8765
+```
+
+```bash
+# macOS
+python3 -m t3rec.web --raw-dir data/raw/MINDsmall_train --cache-dir data/processed/MINDsmall_train --port 8765
+```
+
+Wait about 25 seconds for `T3 recommender workbench: http://127.0.0.1:8765`, then open that address. The **Multi-interest profile**, **Entity interest names** and **Learned ranking (LTR)** toggles switch the add-ons on and off; the learned model is read from `outputs/evaluation/MINDsmall_train/run_summary.json` (or `--ltr-model PATH`). The next section lists the other commands (terminal trace, evaluation, tuning); on macOS, write `python3` wherever they say `python`.
+
+**Common problems**
+
+- `No module named 't3rec'`: you are not in the `ir-project` folder, or step 3 was not run in this terminal.
+- `python` not found on macOS: use `python3`.
+- `Address already in use`: another copy of the server is running; stop it with Ctrl+C or pick another port, e.g. `--port 8766`.
 
 ## Run on MIND
 
@@ -105,6 +199,7 @@ Paired differences across the 20,654 users (95% confidence intervals):
 - **E vs D:** no accuracy difference [−0.0002, +0.0008]; category diversity +0.005 [+0.005, +0.006].
 - **F vs D:** no accuracy difference on NDCG@10 [−0.002, +0.001], NDCG@5 or P@5; P@10 −0.0005 [−0.0009, −0.0000]; category diversity +0.008 [+0.007, +0.010], and the lowest pairwise similarity of all models (0.011).
 - **G vs F:** no accuracy difference on NDCG@10 [−0.001, +0.002]; grouping interests with entity similarity changes neither accuracy nor category diversity, so it is not the default.
+- **Entity signal inside H:** retraining H without entity similarity (same split, training slice and seed) lowers NDCG@10 from 0.373 to 0.370 (−0.004 [−0.006, −0.002]), NDCG@5 by 0.005 and category diversity by 0.022 (all significant): entities contribute about 15% of H's gain over D, although grouping interests with them (G) adds nothing.
 - **H vs D:** NDCG@10 +0.025 [+0.023, +0.028], P@5 +0.008 [+0.007, +0.009]: learned weights beat the hand-set ones, the largest gain after B vs A. The learned model leans most on entity similarity, recency and popularity (standardized weights 0.21, 0.20, 0.17; word cosine 0.05) and orders 64.5% of clicked-vs-skipped pairs correctly on held-out training-period impressions. It costs category diversity (−0.052 [−0.054, −0.051]) because it favours fresh and popular stories.
 
 R@k is high even for random order because the median impression shows only 26 articles, so P@k and NDCG are the more informative metrics. MIND clicks are implicit feedback, and this split is not the official MIND test split, so these numbers are not comparable with the MIND leaderboard.
@@ -126,7 +221,7 @@ Supplementary checks on full-catalog recommendations (top 10 from all 51k articl
 **Planned / known limitations**
 
 - No stemming or lemmatization ("recipe" does not match "recipes") and a short stopword list, so common words such as "new" can create weak matches.
-- Interests are still grouped by words. Grouping with entity similarity was tested (model G) and did not change accuracy (NDCG@10 0.3750 vs 0.3749 on validation); on inspection it could merge unrelated stories, so entities are used for labels and as a ranking feature instead. Articles without entities, and interests whose articles share no entity, fall back to top-word labels.
+- Interests are still grouped by words. Grouping with entity similarity was tested (model G) and did not change accuracy (NDCG@10 0.3750 vs 0.3749 on validation); on inspection it could merge unrelated stories, so entities are used for labels and as a ranking feature instead (where they add +0.004 NDCG@10). Articles without entities, and interests whose articles share no entity, fall back to top-word labels.
 - MIND has no publication dates. The evaluation uses a first-exposure proxy; the workbench and trace have no recency signal at all.
 - Popularity uses training-period counts, which say nothing about the 69% of test-period clicks that go to articles with no training clicks. Short-window (last-hours) popularity is a natural extension.
 - The learning-to-rank model buys accuracy with less category variety (see Results); combining it with MMR or interest quotas is the obvious next step.
@@ -161,7 +256,7 @@ The pipeline parses article IDs, title, abstract, category, subcategory, URL, an
 - Article rows are sparse term-to-weight mappings. TF uses `1 + log(count)`, smoothed IDF is `log((1 + N)/(1 + df)) + 1`, and each row is L2 normalized.
 - User query: `normalize(sum_i interaction_weight_i * exp(-ln(2)*age_i/half_life) * article_tfidf_i)`. Clicks default to weight 1; explicit per-interaction weights and optional time decay are supported.
 - Multi-interest profiles (`profiles.build_interest_profiles`): the history is visited in reading order; each article joins the interest whose centroid it is most similar to if the cosine is at least 0.10, otherwise it leads a new interest, up to 3. Each interest's champion lists supply candidates; an article's relevance is its cosine to the best-matching interest; top-K slots are split across interests by the largest-remainder method in proportion to interest size, and when diversity is on, MMR runs within each interest so it cannot undo the split. Articles that share no term with any interest only fill slots no interest could fill. Validation on the training period showed more interests lowering NDCG (3 → 0.379, 5 → 0.374 against 0.382 for a single profile) while the joining threshold made no difference, because most news articles share almost no terms.
-- Entities (`entities.py`): an article's entity vector is the confidence-weighted mean of the MIND embeddings of its title (weight 2) and abstract (weight 1) entities. Raw embeddings share a common direction (random article pairs score 0.29), so vectors are centred on the catalog mean (random pairs about 0.0, same-subcategory pairs about 0.2, same-subcategory pairs with no shared word 0.16) and L2-normalized. Interest labels are the entity name mentioned by the most member articles, plus a second only when at least two members mention it. Blending entity cosine into candidate matching lowered validation NDCG@10 at every weight (0.375 to 0.354–0.365), so candidates are matched by words; entity similarity to the reader's history enters ranking only through the learned model.
+- Entities (`entities.py`): an article's entity vector is the confidence-weighted mean of the MIND embeddings of its title (weight 2) and abstract (weight 1) entities. Raw embeddings share a common direction (random article pairs score 0.29), so vectors are centred on the catalog mean (random pairs about 0.0, same-subcategory pairs about 0.2, same-subcategory pairs with no shared word 0.16) and L2-normalized. Interest labels are the entity name mentioned by the most member articles, plus a second only when at least two members mention it. Blending entity cosine into candidate matching lowered validation NDCG@10 at every weight (0.375 to 0.354–0.365), so candidates are matched by words; entity similarity to the reader's history enters ranking only through the learned model; removing it from that model lowers NDCG@10 by 0.004.
 - Learning to rank (`ltr.py`): each candidate gets eight features (raw cosine, scaled cosine, scaled Jaccard, recency, popularity, best-interest cosine, entity similarity, category match). Within an impression every (clicked, skipped) pair is a training example for a linear model trained with the pairwise logistic loss log(1 + exp(-w · (z(x+) - z(x-)))), features standardized, plain SGD, L2 1e-4, four skipped articles per click. It trains on the latest 12.5% of the training period, with features computed from signals known before that slice, so no test impression is seen.
 - Champion lists retrieve articles with high TF-IDF weights for the user's strongest terms. Cluster pruning starts with the lexicographically first article, then uses deterministic farthest-first cosine selection for the remaining √N leaders: each new leader is the article least similar to its nearest selected leader. It attaches every other article to its `b1=2` nearest leaders (`cluster_followers_per_item`); a query probes the `b2=20` leaders nearest the profile (`cluster_probe_count`) and exactly scores a bounded shortlist of their followers. Sparse similarities use inverted indexes rather than dense pairwise comparisons. On 100 evenly spaced MIND held-out impression profiles, for full-catalog cosine retrieval with a 100-item shortlist, b1=2/b2=20 overlapped 78.1% of exact cosine top 10, versus 64.5% for b1=2/b2=10; shortlist generation took 31.8 versus 18.5 seconds across the 100 queries. This is a preliminary retrieval-only sample, not an offline recommendation-quality result; the full-catalog evaluation uses displayed-click labels and cannot measure quality for unshown articles. Both retrieval modes are selectable; `candidate_mode="all"` remains available for evaluation. Cold-start users use a deterministic quality-ranked candidate fallback.
 - Jaccard compares typed sets of user-interest terms and category/subcategory features with each item's terms and zones. It remains secondary to cosine.

@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import json
 import unittest
 import shutil
 import tempfile
@@ -507,6 +508,51 @@ class LearningToRankTests(unittest.TestCase):
     def test_training_needs_clicked_and_skipped_candidates(self):
         with self.assertRaises(ValueError):
             train_pairwise([([[1.0]], [])], features=("x",))
+
+
+class UiAddonTests(unittest.TestCase):
+    def test_learned_ranker_replaces_hand_weights(self):
+        from t3rec.ltr import FEATURES
+        docs = [Article("H1", "space rocket launch"), Article("H2", "space rocket orbit"),
+                Article("H3", "rocket launch pad"), Article("A", "space rocket launch orbit"),
+                Article("B", "rocket news")]
+        rec = Recommender(docs, click_counts={"B": 100, "A": 1}, history_duplicate_threshold=None)
+        user = User("u", ("H1", "H2", "H3"))
+        hand = rec.recommend(user, limit=2, candidate_mode="all", diverse=False)
+        self.assertEqual(hand[0].article_id, "A")
+        # A ranker that only values popularity must put the most-clicked article first.
+        weights = [1.0 if name == "popularity" else 0.0 for name in FEATURES]
+        ranker = LinearRanker(FEATURES, weights, [0.0] * len(FEATURES), [1.0] * len(FEATURES))
+        learned = rec.recommend(user, limit=2, candidate_mode="all", diverse=False, ranker=ranker)
+        self.assertEqual(learned[0].article_id, "B")
+        self.assertTrue(rec.last_diagnostics["learned_ranking"])
+        self.assertIn("learned model", learned[0].explanation)
+        self.assertTrue(all(0.0 < row.net_score < 1.0 for row in learned))
+
+    def test_ranker_loads_from_evaluation_summary(self):
+        model = {"features": ["x"], "weights": [0.5], "mean": [0.0], "scale": [1.0]}
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "run_summary.json"
+            path.write_text(json.dumps({"learning_to_rank": {"status": "trained", "model": model}}))
+            self.assertEqual(LinearRanker.load(path).weights, [0.5])
+            path.write_text(json.dumps({"learning_to_rank": {"status": "skipped"}}))
+            with self.assertRaises(ValueError):
+                LinearRanker.load(path)
+
+    def test_entity_labels_can_be_switched_off(self):
+        case = EntityInterestTests()
+        case.setUp()
+        rec = Recommender(case.DOCS, entity_index=case.index, max_interests=4,
+                          history_duplicate_threshold=None)
+        user = User("u", ("H1", "K1"))
+        rec.recommend(user, limit=1, candidate_mode="all", diverse=False, multi_interest=True)
+        named = [interest["label"] for interest in rec.last_diagnostics["interests"]]
+        rec.recommend(user, limit=1, candidate_mode="all", diverse=False, multi_interest=True,
+                      entity_labels=False)
+        worded = [interest["label"] for interest in rec.last_diagnostics["interests"]]
+        self.assertEqual(named, ["Gordon Hayward", "Pasta"])
+        self.assertNotIn("Gordon Hayward", worded[0])
+        self.assertIn("fractured", worded[0])
 
 
 if __name__ == "__main__":

@@ -15,7 +15,8 @@ from .diversity import (DiversityComparison, compare_diversity as build_diversit
                        diversity_rerank)
 from .explain import explain_recommendation
 from .models import Article, Recommendation, User
-from .entities import EntityIndex
+from .entities import EntityIndex, dot
+from .ltr import LinearRanker
 from .profiles import (UserProfile, build_interest_profiles, build_user_profile,
                        proportional_quotas)
 from .scoring import (ScoreWeights, article_feature_set, calculate_net_score,
@@ -156,7 +157,9 @@ class Recommender:
                   interaction_weights: Sequence[float] | None = None,
                   candidate_ids: set[str] | None = None,
                   multi_interest: bool = False,
-                  interest_entity_weight: float | None = None) -> list[Recommendation]:
+                  interest_entity_weight: float | None = None,
+                  ranker: LinearRanker | None = None,
+                  entity_labels: bool = True) -> list[Recommendation]:
         """Return top-K results with every normalized score component exposed.
 
         ``candidate_mode='champions'`` is the efficient default. ``'all'`` is
@@ -171,6 +174,12 @@ class Recommender:
         to how many read articles each holds. ``interest_entity_weight``
         overrides the recommender's entity weight used when grouping the
         history into interests (0 = words only).
+
+        With ``ranker`` (a trained ``ltr.LinearRanker``) each candidate's
+        hand-weighted net score is replaced by the learned score, squashed to
+        (0, 1), computed from the same eight features used in training;
+        interest slots and diversity reranking then work on that score.
+        ``entity_labels=False`` names interests by top words instead of entities.
         """
         if limit < 1:
             raise ValueError("limit must be at least 1")
@@ -204,9 +213,21 @@ class Recommender:
         interests = (build_interest_profiles(user, self.item_vectors, self.article_by_id,
                                              threshold=self.interest_threshold,
                                              max_interests=self.max_interests,
-                                             entity_index=self.entity_index,
+                                             entity_index=(self.entity_index
+                                                           if entity_labels or entity_weight > 0
+                                                           else None),
                                              entity_weight=entity_weight)
                      if multi_interest and profile.vector else [])
+        # The learned ranker's "interest similarity" feature needs interests
+        # even when result slots are not shared; it uses word-grouped
+        # interests, as in training.
+        feature_interests = interests
+        if ranker is not None and not interests and profile.vector:
+            feature_interests = build_interest_profiles(
+                user, self.item_vectors, self.article_by_id,
+                threshold=self.interest_threshold, max_interests=self.max_interests)
+        entity_profile = (self.entity_index.profile(user.history)
+                          if ranker is not None and self.entity_index is not None else None)
         queries = [interest.vector for interest in interests] or [profile.vector]
         per_query_pool = -(-candidate_pool_size // len(queries))
         allowed = candidate_ids
@@ -318,8 +339,19 @@ class Recommender:
                      if recency_available else 0.0)
             popular = popularity_score(article.article_id, self.click_counts,
                                        max_log_clicks=self.max_log_clicks)
+            # Extra features for the learned ranker (zeros when it is not used).
+            single_cosine = interest_cosine = entity_similarity = category = 0.0
+            if ranker is not None:
+                single_cosine = (cosine_relevance(profile.vector, item_vector)
+                                 if interests else relevance)
+                interest_cosine = max((cosine_relevance(interest.vector, item_vector)
+                                       for interest in feature_interests), default=single_cosine)
+                entity_similarity = (dot(entity_profile, self.entity_index.vector(article.article_id))
+                                     if entity_profile is not None else 0.0)
+                category = category_match_score(profile, article)
             components.append((article, item_vector, relevance, jaccard, fresh, popular,
-                               interest_index))
+                               interest_index, single_cosine, interest_cosine,
+                               entity_similarity, category))
         # Cosine and Jaccard are query-dependent and small (top MIND cosines are
         # ~0.1-0.4), while popularity is a static [0,1] quality score g(d).
         # Dividing both by their maximum over this candidate set puts them on
@@ -329,12 +361,21 @@ class Recommender:
             max_jaccard = max((row[3] for row in components), default=0.0)
         else:
             max_relevance = max_jaccard = 1.0
+        max_single = max((row[7] for row in components), default=0.0)
         scored = []
-        for article, item_vector, relevance, jaccard, fresh, popular, interest_index in components:
+        for (article, item_vector, relevance, jaccard, fresh, popular, interest_index,
+             single_cosine, interest_cosine, entity_similarity, category) in components:
             relevance_n = relevance / max_relevance if max_relevance else 0.0
             jaccard_n = jaccard / max_jaccard if max_jaccard else 0.0
-            net = calculate_net_score(relevance_n, jaccard=jaccard_n, recency=fresh,
-                                      popularity=popular, weights=weights_map)
+            if ranker is not None:
+                # Same feature order as ltr.FEATURES and as in training.
+                net = ranker.probability([
+                    single_cosine, single_cosine / max_single if max_single else 0.0,
+                    jaccard_n, fresh, popular, interest_cosine, entity_similarity, category,
+                ])
+            else:
+                net = calculate_net_score(relevance_n, jaccard=jaccard_n, recency=fresh,
+                                          popularity=popular, weights=weights_map)
             scored.append((net, article, item_vector, relevance, jaccard, fresh, popular,
                            relevance_n, jaccard_n, interest_index))
 
@@ -402,6 +443,9 @@ class Recommender:
                 history_size=sum(len(item.members) for item in interests),
                 interest_vector=interest.vector if interest else None,
             )
+            if ranker is not None:
+                explanation += (f" Ranked by the learned model (score {net:.3f}); "
+                                "the hand-set weights were not used.")
             top_candidates.append(Recommendation(
                 article=article, relevance=relevance, jaccard=jaccard,
                 category_match=category, recency=fresh, popularity=popular,
@@ -439,6 +483,7 @@ class Recommender:
             "recency_available": recency_available,
             "normalization_max": {"relevance": max_relevance, "jaccard": max_jaccard},
             "history_copies_removed": removed_copies,
+            "learned_ranking": ranker is not None,
             "interests": [{"label": interest.label, "category": interest.category,
                            "size": len(interest.members), "members": list(interest.members)}
                           for interest in interests],

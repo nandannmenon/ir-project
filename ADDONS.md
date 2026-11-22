@@ -41,7 +41,8 @@ So we kept grouping by words, and used entities only for **labels** and as a **r
 ### Result
 
 - Interest labels are now real names a person can understand.
-- Accuracy stayed the same (model G vs model F: no real difference).
+- On its own, accuracy stayed the same (model G vs model F: no real difference).
+- **Inside learning to rank it helps a little.** We retrained the learned model without the entity signal and compared on the same 31,290 test sessions. With entities, ranking quality is 0.373; without, 0.370. That is a small but statistically significant gain (+0.004, about 15% of what learning to rank adds), and the lists are also more varied (+0.022 category variety).
 
 ---
 
@@ -104,8 +105,19 @@ The learned model recommends **less varied** lists (category variety dropped fro
 
 | Add-on | Did it improve accuracy? | What it adds |
 |---|---|---|
-| Entity-based interests | No (same accuracy) | Readable interest names, and a strong new signal for ranking |
+| Entity-based interests | Not on its own; a small gain inside learning to rank (+0.004) | Readable interest names, and a ranking signal that also makes lists more varied |
 | Learning to rank | **Yes** (0.348 → 0.373) | Weights learned from real clicks instead of guessed |
+
+## How to see them in the UI
+
+Start the UI on MIND (see the README setup), pick reader **U10438**, set **Results** to 10 and turn on **Multi-interest profile**. Then:
+
+| Toggle | What changes |
+|---|---|
+| **Entity interest names** | On: interests are named after entities ("Gordon Hayward", "Ukraine · Donald Trump"). Off: the old top-word names ("hayward · gordon · hand"). The recommended articles stay the same; only the names change. |
+| **Learned ranking (LTR)** | On: articles are ranked by the learned model instead of the hand-set weights (the weight boxes grey out). The list shifts toward fresher, more popular stories, and each explanation ends with "Ranked by the learned model". |
+
+The learned model is read from `outputs/evaluation/MINDsmall_train/run_summary.json`, written by the evaluation. If that file has no trained model, the toggle stays disabled.
 
 ## Where it is in the code
 
